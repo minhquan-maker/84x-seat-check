@@ -312,7 +312,7 @@
 
   <div class="footer-note">
     <div><strong>Dùng chung:</strong> mọi thay đổi được lưu trên máy chủ và hiện ngay cho người còn lại. <span id="lastEdit"></span></div>
-    <div><span class="save-status" id="saveStatus">● Đang kết nối…</span> · <span id="onlineInfo"></span></div>
+    <div><span class="save-status" id="saveStatus">● Đang tải…</span> · <span id="onlineInfo"></span></div>
   </div>
 </div>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
@@ -340,23 +340,27 @@ function setStatus(text, color) {
 function applyState(state, announce) {
   if (!state || state.rev < serverRev) return;
   const changed = state.rev !== serverRev;
+  const first = serverRev < 0;
   serverRev = state.rev;
   assignments = state.assignments || {};
-  if (selectedSeatId && !seats.some(s => s.id === selectedSeatId)) selectedSeatId = null;
   renderAll();
-  const info = document.getElementById("lastEdit");
-  info.textContent = state.updatedAt
+  document.getElementById("lastEdit").textContent = state.updatedAt
     ? `Sửa lần cuối bởi ${state.updatedBy} · ${new Date(state.updatedAt).toLocaleString("vi-VN")}`
     : "Chưa có chỉnh sửa";
-  if (announce && changed && state.updatedBy && state.updatedBy !== me) {
+  if (announce && changed && !first && state.updatedBy && state.updatedBy !== me) {
     showToast(`${state.updatedBy} vừa cập nhật sơ đồ ghế.`);
   }
 }
-async function api(path, body) {
+function showOnline(online) {
+  const others = (online || []).filter(u => u !== me);
+  document.getElementById("onlineInfo").textContent = others.length ? `${others.join(", ")} đang online` : "Chỉ mình bạn đang online";
+}
+// All edits go to one endpoint; the server saves to the database and returns the new state.
+async function act(action, body) {
   let res;
   try {
-    res = await fetch(path, {
-      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {})
+    res = await fetch("/api/seats", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action, ...body })
     });
   } catch (_) {
     setStatus("● Mất kết nối", "#ff9b42");
@@ -367,27 +371,36 @@ async function api(path, body) {
   const data = await res.json().catch(() => ({}));
   if (!res.ok) { showToast(data.error || "Không lưu được thay đổi."); return false; }
   applyState(data.state, false);
-  setStatus("● Đã lưu · đồng bộ trực tiếp", "");
+  setStatus("● Đã lưu", "");
   return true;
 }
-function connectLive() {
-  const es = new EventSource("/api/events");
-  es.addEventListener("state", e => { setStatus("● Đã lưu · đồng bộ trực tiếp", ""); applyState(JSON.parse(e.data), true); });
-  es.addEventListener("presence", e => {
-    const others = JSON.parse(e.data).filter(u => u !== me);
-    document.getElementById("onlineInfo").textContent = others.length ? `${others.join(", ")} đang online` : "Chỉ mình bạn đang online";
-  });
-  es.onerror = () => setStatus("● Đang kết nối lại…", "#ff9b42");
+// Shared view: ask the server every few seconds whether anything changed.
+const POLL_MS = 2500;
+let polling = false;
+async function poll() {
+  if (document.hidden || polling) return;
+  polling = true;
+  try {
+    const res = await fetch("/api/state?since=" + serverRev);
+    if (res.status === 401) { location.reload(); return; }
+    if (!res.ok) throw new Error("bad status");
+    const data = await res.json();
+    me = data.user;
+    document.getElementById("meName").textContent = me;
+    showOnline(data.online);
+    if (data.state) applyState(data.state, true);
+    setStatus("● Đã lưu · tự cập nhật", "");
+  } catch (_) {
+    setStatus("● Mất kết nối, đang thử lại…", "#ff9b42");
+  } finally {
+    polling = false;
+  }
 }
 async function init() {
-  try {
-    const r = await fetch("/api/me");
-    if (!r.ok) { location.reload(); return; }
-    me = (await r.json()).user;
-  } catch (_) { setStatus("● Mất kết nối", "#ff9b42"); }
-  document.getElementById("meName").textContent = me;
   renderAll();
-  connectLive();
+  await poll();
+  setInterval(poll, POLL_MS);
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) poll(); });
 }
 function norm(value) {
   return String(value ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("vi").replace(/đ/g, "d").trim();
@@ -464,7 +477,7 @@ function renderCurrentSeat() {
   const removeBtn = document.getElementById("removeFromSeat");
   if (removeBtn) removeBtn.addEventListener("click", async () => {
     const seatId = selectedSeatId;
-    if (await api("/api/unassign", { seat: seatId })) showToast(`Đã bỏ khách khỏi ghế ${seatId}.`);
+    if (await act("unassign", { seat: seatId })) showToast(`Đã bỏ khách khỏi ghế ${seatId}.`);
   });
   document.getElementById("clearSelectedSeat").addEventListener("click", () => {
     selectedSeatId = null;
@@ -521,7 +534,7 @@ function renderGuests() {
     const seatId = selectedSeatId;
     if (!seatId || !guestById.has(gid)) return;
     const prevSeat = getSeatForGuest(gid);
-    if (!await api("/api/assign", { seat: seatId, guestId: gid })) return;
+    if (!await act("assign", { seat: seatId, guestId: gid })) return;
     const g = guestById.get(gid);
     showToast(`${g.name} đã được xếp vào ghế ${seatId}${prevSeat && prevSeat !== seatId ? ` (đã chuyển từ ${prevSeat})` : ""}.`);
   }));
@@ -618,7 +631,7 @@ async function importCSV(file) {
     }
   }
   selectedSeatId = null;
-  if (await api("/api/replace", { assignments: next })) showToast(`Đã nhập ${imported} lượt xếp ghế từ CSV.`);
+  if (await act("replace", { assignments: next })) showToast(`Đã nhập ${imported} lượt xếp ghế từ CSV.`);
 }
 document.getElementById("exportBtn").addEventListener("click", exportCSV);
 document.getElementById("importBtn").addEventListener("click", () => document.getElementById("importFile").click());
@@ -632,7 +645,7 @@ document.getElementById("importFile").addEventListener("change", async event => 
 document.getElementById("resetBtn").addEventListener("click", async () => {
   if (confirm("Xoá toàn bộ xếp ghế hiện tại cho TẤT CẢ mọi người? Thao tác này không thể hoàn tác trừ khi bạn đã xuất CSV.")) {
     selectedSeatId = null;
-    if (await api("/api/reset")) showToast("Đã xoá toàn bộ xếp ghế.");
+    if (await act("reset")) showToast("Đã xoá toàn bộ xếp ghế.");
   }
 });
 document.getElementById("logoutBtn").addEventListener("click", async () => {

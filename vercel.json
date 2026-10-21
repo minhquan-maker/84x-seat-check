@@ -1,0 +1,8 @@
+{
+  "regions": ["hnd1"],
+  "functions": { "api/page.js": { "includeFiles": "app/**" } },
+  "rewrites": [
+    { "source": "/", "destination": "/api/page" },
+    { "source": "/index.html", "destination": "/api/page" }
+  ]
+}
