@@ -7,7 +7,7 @@ The seating planner page plus a small backend:
 - **Live sync** (Server-Sent Events). The footer shows who else is online and who edited last.
 
 ```
-browser ──HTTPS──▶ server.js ──▶ Postgres (Neon free)   (one row = the seat plan)
+browser ──HTTPS──▶ server.js ──▶ Postgres (Supabase free)   (one row = the seat plan)
    ▲                   │
    └──── live push ────┘
 ```
@@ -31,22 +31,24 @@ node server.js
 ```
 Without `DATABASE_URL` the plan is saved to `data/state.json`. That is fine locally, but not on a free host.
 
-## 2. Put it online for free (Neon database + Render free web service)
+## 2. Put it online for free (Supabase database + Render free web service)
 
-### Step 1: create the database (Neon)
-1. Sign up at <https://neon.tech> and create a project (any name, pick a region near you).
-2. On the project dashboard click **Connect** and copy the **connection string**. It looks like `postgresql://user:pass@ep-xxx.neon.tech/neondb?sslmode=require`. Keep it secret.
-3. You don't need to create any tables. The server creates its own on first start.
+### Step 1: create the database (Supabase)
+1. Sign up at <https://supabase.com> and click **New project**.
+2. Pick a name and a region near you. Set a **database password** and **use only letters and numbers** (no `@ : / # ?`), because it goes inside a URL. Save it.
+3. When the project is ready, click **Connect** at the top. Choose **Session pooler** (IPv4-compatible, which Render needs; the "Direct connection" will not work) and copy the URI. It looks like `postgresql://postgres.abcdefgh:[YOUR-PASSWORD]@aws-0-xx.pooler.supabase.com:5432/postgres`.
+4. Replace `[YOUR-PASSWORD]` with the password from step 2 (remove the brackets). That final string is your `DATABASE_URL`.
+5. No tables to create. The server creates its own on first start.
 
 ### Step 2: deploy (Render)
 1. Go to <https://render.com> → **Blueprints → New Blueprint Instance** → pick this repo, branch `main`.
-2. Fill in `DATABASE_URL` (the Neon string), `USER1_NAME`, `USER1_PASS`, `USER2_NAME`, `USER2_PASS`. The session secret is generated for you.
+2. Fill in `DATABASE_URL`, `USER1_NAME`, `USER1_PASS`, `USER2_NAME`, `USER2_PASS`. The session secret is generated for you.
 3. Deploy. You get a URL like `https://84x-seat-check.onrender.com`.
 
-**Free-tier behavior:** Render's free web service sleeps after about 15 minutes with no traffic, so the first visit afterwards can take about 30–60 seconds. Nothing is lost, because the plan is in Neon. Open the link a minute before you need it.
+**Free-tier behavior:** Render's free web service sleeps after about 15 minutes with no traffic, so the first visit afterwards can take about 30–60 seconds. Nothing is lost, because the plan is in the database. Supabase also pauses free projects after about a week of inactivity; opening the app regularly keeps it awake, and you can un-pause it from the dashboard.
 
 ### Any other host
-Run `node server.js` with the same variables, behind HTTPS, with `TRUST_PROXY=1`.
+Run `node server.js` with the same variables, behind HTTPS, with `TRUST_PROXY=1`. Any Postgres works as `DATABASE_URL` (Neon, Railway, Aiven, your own). Hosts with a self-signed certificate can append `?sslmode=no-verify`.
 
 ## Environment variables
 

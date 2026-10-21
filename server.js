@@ -100,9 +100,19 @@ function fileStore() {
     },
   };
 }
+// Supabase's pooler uses a CA that Node doesn't trust by default, so verification fails with
+// "self-signed certificate in certificate chain". Traffic is still TLS-encrypted without it.
+function pgConfig(url) {
+  const u = new URL(url);
+  if (/supabase\.(com|co)$/.test(u.hostname)) {
+    u.searchParams.delete('sslmode');
+    return { connectionString: u.toString(), ssl: { rejectUnauthorized: false } };
+  }
+  return { connectionString: url };
+}
 function pgStore() {
   const { Pool } = require('pg');
-  const pool = new Pool({ connectionString: DATABASE_URL, max: 3, idleTimeoutMillis: 30000 });
+  const pool = new Pool({ ...pgConfig(DATABASE_URL), max: 3, idleTimeoutMillis: 30000 });
   pool.on('error', e => console.error('Idle database client error:', e.message)); // don't crash when the host drops idle connections
   return {
     name: 'postgres',
