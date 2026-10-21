@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#080d19">
+<title>Đăng nhập | B71 × VLU Seating Planner</title>
+<style>
+  :root { --bg:#080d19; --line:rgba(174,194,225,.15); --muted:#9aa9c4; --text:#f3f6fc; --teal:#28d6c5; --red:#f3434e; }
+  * { box-sizing:border-box; }
+  body {
+    margin:0; min-height:100vh; display:grid; place-items:center; padding:20px; color:var(--text);
+    background:
+      radial-gradient(ellipse at 16% 2%, rgba(27,170,165,.18), transparent 29%),
+      radial-gradient(ellipse at 93% 10%, rgba(243,67,78,.16), transparent 26%), var(--bg);
+    font-family: Inter, "Segoe UI", Arial, sans-serif;
+  }
+  button, input { font:inherit; }
+  .card { width:100%; max-width:380px; padding:28px; border:1px solid var(--line); border-radius:19px; background:rgba(17,25,43,.92); box-shadow:0 18px 60px rgba(0,0,0,.35); }
+  .brand { display:flex; align-items:center; gap:12px; margin-bottom:22px; }
+  .mark { width:42px; height:42px; display:grid; place-items:center; border-radius:12px; color:#06111b; font-weight:900; font-size:12px; background:linear-gradient(135deg,var(--teal),#3ca6ff 58%,#ee3d5a); }
+  .title { font-size:13px; font-weight:750; letter-spacing:.12em; text-transform:uppercase; }
+  .sub { margin-top:4px; color:var(--muted); font-size:12px; }
+  h1 { margin:0 0 6px; font-size:24px; letter-spacing:-.03em; }
+  h1 span { color:var(--red); }
+  p { margin:0 0 20px; color:#aebbd0; font-size:13px; line-height:1.6; }
+  label { display:block; margin:0 0 5px 2px; color:#7f91ae; font-size:10px; font-weight:850; letter-spacing:.08em; text-transform:uppercase; }
+  input { width:100%; padding:11px 12px; margin-bottom:14px; border-radius:9px; outline:none; color:#eff5ff; background:rgba(4,10,22,.54); border:1px solid rgba(151,173,206,.18); font-size:14px; }
+  input:focus { border-color:rgba(40,214,197,.7); box-shadow:0 0 0 3px rgba(40,214,197,.075); }
+  button { width:100%; padding:12px; border:0; border-radius:10px; cursor:pointer; font-size:13px; font-weight:800; color:#041b20; background:linear-gradient(100deg,#16b9ad,#27d7c3); }
+  button:disabled { opacity:.6; cursor:wait; }
+  .error { min-height:18px; margin:-4px 0 12px; color:#ff9398; font-size:12px; }
+</style>
+</head>
+<body>
+<form class="card" id="form">
+  <div class="brand">
+    <div class="mark">B71</div>
+    <div><div class="title">B71 Vietnam × NUSX</div><div class="sub">84X / VLU Kick-off</div></div>
+  </div>
+  <h1>VVIP <span>SEATING</span> PLANNER</h1>
+  <p>Đăng nhập để xem và chỉnh sơ đồ ghế. Mọi thay đổi được lưu và hiển thị ngay cho người còn lại.</p>
+  <label for="u">Tên đăng nhập</label>
+  <input id="u" name="username" autocomplete="username" autocapitalize="none" required autofocus>
+  <label for="p">Mật khẩu</label>
+  <input id="p" name="password" type="password" autocomplete="current-password" required>
+  <div class="error" id="err" role="alert"></div>
+  <button id="go" type="submit">Đăng nhập</button>
+</form>
+<script>
+document.getElementById("form").addEventListener("submit", async e => {
+  e.preventDefault();
+  const btn = document.getElementById("go"), err = document.getElementById("err");
+  btn.disabled = true; err.textContent = "";
+  try {
+    const r = await fetch("/api/login", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username: document.getElementById("u").value, password: document.getElementById("p").value })
+    });
+    if (r.ok) { location.reload(); return; }
+    err.textContent = (await r.json().catch(() => ({}))).error || "Đăng nhập thất bại.";
+  } catch (_) { err.textContent = "Không kết nối được máy chủ."; }
+  btn.disabled = false;
+});
+</script>
+</body>
+</html>

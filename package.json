@@ -1,0 +1,10 @@
+{
+  "name": "84x-seat-check",
+  "version": "1.0.0",
+  "description": "B71 × VLU VVIP seating planner with login and shared live state",
+  "main": "server.js",
+  "scripts": { "start": "node server.js" },
+  "engines": { "node": ">=18" },
+  "license": "UNLICENSED",
+  "private": true
+}
