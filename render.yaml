@@ -2,21 +2,17 @@ services:
   - type: web
     name: 84x-seat-check
     runtime: node
-    plan: starter            # persistent disks need a paid instance
-    buildCommand: "true"
+    plan: free               # data lives in Postgres (DATABASE_URL), so no disk is needed
+    buildCommand: npm install
     startCommand: node server.js
     healthCheckPath: /healthz
-    disk:
-      name: seat-data
-      mountPath: /var/data
-      sizeGB: 1
     envVars:
-      - key: DATA_DIR
-        value: /var/data
       - key: TRUST_PROXY
         value: "1"
       - key: SESSION_SECRET
         generateValue: true
+      - key: DATABASE_URL
+        sync: false
       - key: USER1_NAME
         sync: false
       - key: USER1_PASS

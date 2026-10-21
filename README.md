@@ -7,14 +7,14 @@ The seating planner page plus a small backend:
 - **Live sync** (Server-Sent Events). The footer shows who else is online and who edited last.
 
 ```
-browser ──HTTPS──▶ server.js ──▶ data/state.json   (one small file = the seat plan)
+browser ──HTTPS──▶ server.js ──▶ Postgres (Neon free)   (one row = the seat plan)
    ▲                   │
    └──── live push ────┘
 ```
 
 | File | What it is |
 |---|---|
-| `server.js` | The whole backend (Node 18+, **no dependencies**) |
+| `server.js` | The whole backend (Node 18+, one dependency: `pg`) |
 | `app/index.html` | The planner (only served after login) |
 | `app/login.html` | Login page |
 | `render.yaml` | One-click deploy blueprint for Render |
@@ -22,26 +22,31 @@ browser ──HTTPS──▶ server.js ──▶ data/state.json   (one small fi
 ## 1. Run it locally (2 minutes)
 
 ```bash
+npm install
 export USER1_NAME=alice USER1_PASS='pick-a-password'
 export USER2_NAME=bob   USER2_PASS='pick-another'
 export SESSION_SECRET="$(node -e "console.log(require('crypto').randomBytes(32).toString('hex'))")"
 node server.js
 # open http://localhost:3000, log in in two browser windows, and try it
 ```
+Without `DATABASE_URL` the plan is saved to `data/state.json`. That is fine locally, but not on a free host.
 
-## 2. Put it online (so both of you can use a link)
+## 2. Put it online for free (Neon database + Render free web service)
 
-This needs a host that runs Node **and keeps a disk**, because the plan is saved in `data/state.json`. Static hosts (GitHub Pages, Netlify) can't do this.
+### Step 1: create the database (Neon)
+1. Sign up at <https://neon.tech> and create a project (any name, pick a region near you).
+2. On the project dashboard click **Connect** and copy the **connection string**. It looks like `postgresql://user:pass@ep-xxx.neon.tech/neondb?sslmode=require`. Keep it secret.
+3. You don't need to create any tables. The server creates its own on first start.
 
-### Option A — Render (easiest)
-1. Go to <https://render.com> → **New → Blueprint** → connect this GitHub repo. It reads `render.yaml`.
-2. Fill in `USER1_NAME`, `USER1_PASS`, `USER2_NAME`, `USER2_PASS` when prompted. The `SESSION_SECRET` is generated for you.
-3. Deploy. You get a URL like `https://84x-seat-check.onrender.com`. Send it to the other person with their password.
+### Step 2: deploy (Render)
+1. Go to <https://render.com> → **Blueprints → New Blueprint Instance** → pick this repo, branch `main`.
+2. Fill in `DATABASE_URL` (the Neon string), `USER1_NAME`, `USER1_PASS`, `USER2_NAME`, `USER2_PASS`. The session secret is generated for you.
+3. Deploy. You get a URL like `https://84x-seat-check.onrender.com`.
 
-The blueprint uses the paid *Starter* plan because a persistent disk is required. On the free plan the file is wiped on every restart.
+**Free-tier behavior:** Render's free web service sleeps after about 15 minutes with no traffic, so the first visit afterwards can take about 30–60 seconds. Nothing is lost, because the plan is in Neon. Open the link a minute before you need it.
 
-### Option B — Any VPS / Railway / Fly.io
-Run `node server.js` with the same environment variables. Mount a persistent volume and point `DATA_DIR` at it. Put it behind HTTPS and set `TRUST_PROXY=1`.
+### Any other host
+Run `node server.js` with the same variables, behind HTTPS, with `TRUST_PROXY=1`.
 
 ## Environment variables
 
@@ -50,13 +55,16 @@ Run `node server.js` with the same environment variables. Mount a persistent vol
 | `USER1_NAME` / `USER1_PASS` | First account |
 | `USER2_NAME` / `USER2_PASS` | Second account |
 | `SESSION_SECRET` | Long random string that signs login cookies. Changing it logs everyone out |
-| `DATA_DIR` | Where `state.json` lives (default `./data`). Must be persistent |
+| `DATABASE_URL` | Postgres connection string. If unset, the plan is stored in `DATA_DIR/state.json` instead |
+| `DATA_DIR` | Only for file storage (default `./data`) |
 | `TRUST_PROXY` | `1` when behind a proxy, so login rate-limiting sees real IPs |
 | `PORT` | Default `3000` (hosts usually set this for you) |
 
 To change a password, change the variable and redeploy. There is no sign-up page, so only the 2 accounts can ever log in.
 
 ## How edits are shared
+
+Writes are queued and saved before anyone is told about them. If the database is down, the edit is rejected instead of looking saved.
 
 The browser sends small actions (`assign`, `unassign`, `replace` for CSV import, `reset`) and the **server** applies them. If you each edit different seats at the same time, both edits survive. If you both edit the *same* seat, the last one wins. A guest can only sit in one seat, and the server enforces that.
 
